@@ -1,20 +1,14 @@
 # lua-binary-protocol-module
-可以在LUA中使用table来生成二进制数据协议。
+可以在LUA中使用来生成二进制数据协议。
 
-使用LUA的string库中pack，unpack来对协议描述表（table）动态生成对应的序列化，反序列化函数
+主要代码在CreateDynamicFunction里
 
-未经过严格的效率测试，解析时没有对二进制流的进行检测，我的做法是使用pcall调用
+使用string.pack/unpack(也可以自定义函数)根据定义的协议描述表动态生成对应的LUA代码
 
-支持
-boolean
-int8
-uint8
-int16
-uint16
-int32
-uint32
-number
-string
-bytes
-table
-array
+优点:
+    1.LUA数据和二进制数据之间灵活转换, 大部分数据类型都可以转换(甚至可以将闭包生成的代码来序列化, 只要在协议描述表中自定义)
+    2.生成对应的静态代码, 无需再去动态解析协议, 对于复杂的协议可以加快执行效率
+缺点:
+    1.代码是直接从项目里抠出来的, 无法直接用, 但改起来很简单
+
+简单测试过效率, 在一个小型密集项目中测试过, 效果不错
