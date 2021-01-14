@@ -1,224 +1,320 @@
-local Proto = class("Proto")
+--[[
+Example Protos File:
 
-function Proto:ctor(fclass, pts, bClient)
-	self.compLen = 256
-	if not pts then
-		print("init packparse failed. pts or actions is nil.")
-		return
-	end
-	self.cmd2act = {}
-	for _, ptmod in pairs(pts) do
-		local ptinfo = require(ptmod[1])
-		self:AddProto(fclass, ptinfo, bClient)
-	end
-end
-
-function Proto:CreateDynamicFunction(pack_proto, parse_proto)
-	local fds = {
-		boolean = {
-			fmt = "<b", def = "and 1 or 0"
-		},
-		int8 = {
-			fmt = "<b", def = "or 0"
-		},
-		uint8 = {
-			fmt = "<B", def = "or 0"
-		},
-		int16 = {
-			fmt = "<h", def = "or 0"
-		},
-		uint16 = {
-			fmt = "<H", def = "or 0"
-		},
-		int32 = {
-			fmt = "<i4", def = "or 0"
-		},
-		uint32 = {
-			fmt = "<I4", def = "or 0"
-		},
-		number = {
-			fmt = "<n", def = "or 0"
-		},
-		string = {
-			fmt = "<z", def = "or \"\""
-		},
-		bytes = {
-			fmt = "<s4", def = "or \"\""
+local Header = {
+	{"uint16",	"MsgId"},
+	{"uint8",	"CompressType"},
+	{"uint8",	"CryptType"},
+	{"uint32",	"UncompressSize"},
+	{"uint32",	"CheckSum"},
+}
+return {
+	HEADER = {
+		SUBCMD = 0,
+		BODY = {
+			CS = Header,
+			SC = {},
+		}
+	},
+	DEBUG = {
+		SUBCMD = 99,
+		BODY = {
+			CS = {
+				{"table",	"header",	Header},
+				{"string",	"str"},
+			},
+			SC = {}
 		}
 	}
-	if not pack_proto and not parse_proto then return end
-	
-	local codeT, l_fd, l_fmt = {
-		"return function(body)",
-		"local bufT, insertT, packS = {}, table.insert, string.pack"
-	}, {}, {}
-	local function pack_nest(body, bodyname, dep)
-		if not dep then dep = 1 end
-		for _, field in pairs(body) do
-			local fd = fds[field[1]]
-			local fdname = string.format("%s[\"%s\"]", bodyname, field[2])
-			if fd then
-				table.insert(l_fd, fdname.." "..tostring(fd.def))
-				table.insert(l_fmt, fd.fmt)
-			elseif field[1] == "table" then
-				pack_nest(field[3], fdname, dep + 1)
-			elseif field[1] == "array" then
-				if #l_fd > 0 then
-					table.insert(codeT, string.format("insertT(bufT, packS(\"%s\", %s))", table.concat(l_fmt), table.concat(l_fd, ", ")))
-					l_fd, l_fmt = {}, {}
-				end
-				table.insert(codeT, string.format("local arr%d = %s or {}", dep, fdname))
-				table.insert(codeT, string.format("insertT(bufT, packS(\"I4\", #arr%d))", dep))
-				table.insert(codeT, string.format("for i%d = 1, #arr%d do", dep, dep))
-				fd = fds[field[3]]
-				if fd then
-					table.insert(l_fd, string.format("arr%d[i%d] %s", dep, dep, tostring(fd.def)))
-					table.insert(l_fmt, fd.fmt)
-				else
-					pack_nest(field[3], string.format("arr%d[i%d]", dep, dep), dep + 1)
-				end
-				if #l_fd > 0 then
-					table.insert(codeT, string.format("insertT(bufT, packS(\"%s\", %s))", table.concat(l_fmt), table.concat(l_fd, ", ")))
-					l_fd, l_fmt = {}, {}
-				end
-				table.insert(codeT, "end")
-			end
-		end
-		if #l_fd > 0 then
-			table.insert(codeT, string.format("insertT(bufT, packS(\"%s\", %s))", table.concat(l_fmt), table.concat(l_fd, ", ")))
-			l_fd, l_fmt = {}, {}
+}
+
+]]
+
+local Proto
+if class then
+	Proto = class("Proto")
+	function Proto:ctor(pts)
+		self.fmt = {
+			boolean = {
+				fmt = "<b", def = false
+			},
+			int8 = {
+				fmt = "<b", def = 0
+			},
+			uint8 = {
+				fmt = "<B", def = 0
+			},
+			int16 = {
+				fmt = "<h", def = 0
+			},
+			uint16 = {
+				fmt = "<H", def = 0
+			},
+			int32 = {
+				fmt = "<i4", def = 0
+			},
+			uint32 = {
+				fmt = "<I4", def = 0
+			},
+			number = {
+				fmt = "<n", def = 0
+			},
+			string = {
+				fmt = "<z", def = "\"\""
+			},
+			data = {
+				fmt = "<s4", def = "\"\""
+			},
+		}
+		self.name2act = {}
+		self.cmd2act = {}
+
+		self.tmp_fmt = {}
+		self.tmp_val = {}
+
+		for _, ptmod in pairs(pts) do
+			self:AddProto(require(ptmod))
 		end
 	end
-	pack_nest(pack_proto, "body")
-	table.insert(codeT, "return table.concat(bufT)")
-	table.insert(codeT, "end")
-	local packcodes = table.concat(codeT, "\n")
-	--print(packcodes)
+else
+	Proto = {
+		fmt = {
+			boolean = {
+				fmt = "<b", def = false
+			},
+			int8 = {
+				fmt = "<b", def = 0
+			},
+			uint8 = {
+				fmt = "<B", def = 0
+			},
+			int16 = {
+				fmt = "<h", def = 0
+			},
+			uint16 = {
+				fmt = "<H", def = 0
+			},
+			int32 = {
+				fmt = "<i4", def = 0
+			},
+			uint32 = {
+				fmt = "<I4", def = 0
+			},
+			number = {
+				fmt = "<n", def = 0
+			},
+			string = {
+				fmt = "<z", def = "\"\""
+			},
+			data = {
+				fmt = "<s4", def = "\"\""
+			},
+		},
+		name2act = {},
+		cmd2act = {},
 
-	local codeT, l_fd, l_fmt = {
-		"return function(buf, pos_read)",
-		"local body, val, unpackS = nil, nil, string.unpack"
-	}, {}, {}
-	local function parse_nest(body, bodyname, dep)
-		if not dep then dep = 1 end
-		table.insert(codeT, string.format("local body%d = {}", dep))
-		table.insert(codeT, string.format("%s = body%d", bodyname, dep))
-		bodyname = string.format("body%d", dep)
-		for _, field in pairs(body) do
-			local fd = fds[field[1]]
-			local fdname = string.format("%s[\"%s\"]", bodyname, field[2])
-			if fd then
-				table.insert(l_fd, fdname)
-				table.insert(l_fmt, fd.fmt)
-			else
-				if field[1] == "table" then
-					parse_nest(field[3], fdname, dep + 1)
-				elseif field[1] == "array" then
-					if #l_fd > 0 then
-						table.insert(l_fd, "pos_read")
-						table.insert(codeT, string.format("%s = unpackS(\"%s\", buf, pos_read)", table.concat(l_fd, ", "), table.concat(l_fmt)))
-						l_fd, l_fmt = {}, {}
-					end
-					table.insert(codeT, string.format("local arr%d, arrNum%d = {}, 0", dep, dep))
-					table.insert(codeT, string.format("%s = arr%d", fdname, dep))
-					table.insert(codeT, string.format("arrNum%d, pos_read = unpackS(\"<I4\", buf, pos_read)", dep))
-					table.insert(codeT, string.format("for i%d = 1, arrNum%d do", dep, dep))
-					fd = fds[field[3]]
-					if fd then
-						table.insert(l_fd, string.format("arr%d[i%d]", dep, dep))
-						table.insert(l_fmt, fd.fmt)
-					else
-						parse_nest(field[3], string.format("arr%d[i%d]", dep, dep), dep + 1)
-					end
-					if #l_fd > 0 then
-						table.insert(l_fd, "pos_read")
-						table.insert(codeT, string.format("%s = unpackS(\"%s\", buf, pos_read)", table.concat(l_fd, ", "), table.concat(l_fmt)))
-						l_fd, l_fmt = {}, {}
-					end
-					table.insert(codeT, "end")
-				end
-			end
-		end
-		if #l_fd > 0 then
-			table.insert(l_fd, "pos_read")
-			table.insert(codeT, string.format("%s = unpackS(\"%s\", buf, pos_read)", table.concat(l_fd, ", "), table.concat(l_fmt)))
-			l_fd, l_fmt = {}, {}
+		tmp_fmt = {},
+		tmp_val = {},
+	}
+	function Proto:ImportProtos(pts)
+		for _, ptmod in pairs(pts) do
+			self:AddProto(require(ptmod))
 		end
 	end
-	parse_nest(parse_proto, "body")
-	table.insert(codeT, "return body")
-	table.insert(codeT, "end")
-	local parsecodes = table.concat(codeT, "\n")
-	--print(parsecodes)
-
-	return load(packcodes)(), load(parsecodes)()
 end
 
-function Proto:AddProto(fclass, protos, bClient)
-	if not protos then return end
-	for name, proto in pairs(protos) do
-		local t, cmd = {}, proto.SUBCMD
-		_G[name] = cmd
-		if fclass then
-			fclass.actions[cmd] = fclass["on"..name]
+-- 拼接字符串时使用table.concat更好
+
+-- 解析协议并产生专用序列化代码
+function Proto:DynamicPackCode(outCodes, t, tname)
+	local function flushTmp()
+		if #self.tmp_fmt > 0 then
+			table.insert(outCodes, string.format("insert(buf, pack(\"%s\", %s))", table.concat(self.tmp_fmt), table.concat(self.tmp_val, ", ")))
+			self.tmp_fmt = {}
+			self.tmp_val = {}
 		end
-		if bClient then
-			t.pack, t.parse = self:CreateDynamicFunction(proto.BODY.C, proto.BODY.S)
+	end
+	for _, field in pairs(t) do
+		local field_type = field[1]
+		local field_name = string.format("%s[\"%s\"]", tname, field[2])
+		local field_format = self.fmt[field_type]
+
+		if field_format then
+			-- 简单格式
+			table.insert(self.tmp_fmt, field_format.fmt)
+			table.insert(self.tmp_val, field_name.." or "..tostring(field_format.def))
 		else
-			t.pack, t.parse = self:CreateDynamicFunction(proto.BODY.S, proto.BODY.C)
+			-- 复杂格式
+			if field_type == "bytes" then
+				-- 固定长度字节数组
+				local field_len = field[3]
+				table.insert(self.tmp_fmt, string.format("<c%d", field_len))
+				table.insert(self.tmp_val, field_name.." or \"\"")
+			elseif field_type == "table" then
+				-- 表
+				local field_table = field[3]
+				local tmp_table_name = string.format("%s_%s", tname, field[2])
+
+				table.insert(outCodes, string.format("local %s = %s or {}", tmp_table_name, field_name))
+				self:DynamicPackCode(outCodes, field_table, tmp_table_name)
+			elseif field_type == "array" then
+				flushTmp()
+				local array_type = field[3]
+				local tmp_array_name = string.format("%s_%s", tname, field[2])
+				local tmp_array_v_name = string.format("%s_v", tmp_array_name)
+
+				table.insert(outCodes, string.format("local %s = %s or {}", tmp_array_name, field_name))
+				table.insert(outCodes, string.format("insert(buf, pack(\"<I4\", #%s))", tmp_array_name))
+				table.insert(outCodes, string.format("for %s_k, %s_v in ipairs(%s) do", tmp_array_name, tmp_array_name, tmp_array_name))
+
+				if type(array_type) == "string" then
+					field_format = self.fmt[array_type]
+					if field_format then
+						table.insert(self.tmp_fmt, field_format.fmt)
+						table.insert(self.tmp_val, tmp_array_v_name.." or "..tostring(field_format.def))
+					elseif array_type == "bytes" then
+						local field_len = field[4]
+						table.insert(self.tmp_fmt, string.format("<c%d", field_len))
+						table.insert(self.tmp_val, tmp_array_v_name.." or \"\"")
+					end
+				elseif type(array_type) == "table" then
+					local field_table = field[3]
+					local tmp_table_name = string.format("%s_t", tmp_array_v_name)
+					table.insert(outCodes, string.format("local %s = %s or {}", tmp_table_name, tmp_array_v_name))
+					self:DynamicPackCode(outCodes, field_table, tmp_table_name)
+				end
+				flushTmp()
+				table.insert(outCodes, "end")
+			end
 		end
+	end
+	flushTmp()
+end
+
+-- 解析协议并产生专用反序列化代码
+function Proto:DynamicParseCode(outCodes, t, tname)
+	local function flushTmp()
+		if #self.tmp_fmt > 0 then
+			table.insert(outCodes, string.format("%s, pos = unpack(\"%s\", buf, pos)", table.concat(self.tmp_val, ", "), table.concat(self.tmp_fmt)))
+			self.tmp_fmt = {}
+			self.tmp_val = {}
+		end
+	end
+	for _, field in pairs(t) do
+		local field_type = field[1]
+		local field_name = string.format("%s[\"%s\"]", tname, field[2])
+		local field_format = self.fmt[field_type]
+
+		if field_format then
+			-- 简单格式
+			table.insert(self.tmp_fmt, field_format.fmt)
+			table.insert(self.tmp_val, field_name)
+		else
+			-- 复杂格式
+			if field_type == "bytes" then
+				-- 固定长度字节数组
+				local field_len = field[3]
+				table.insert(self.tmp_fmt, string.format("<c%d", field_len))
+				table.insert(self.tmp_val, field_name)
+			elseif field_type == "table" then
+				-- 表
+				local field_table = field[3]
+				local tmp_table_name = string.format("%s_%s", tname, field[2])
+
+				table.insert(outCodes, string.format("local %s = {}", tmp_table_name))
+				self:DynamicParseCode(outCodes, field_table, tmp_table_name)
+				table.insert(outCodes, string.format("%s = %s", field_name, tmp_table_name))
+			elseif field_type == "array" then
+				flushTmp()
+				local array_type = field[3]
+				local tmp_array_name = string.format("%s_%s", tname, field[2])
+				local tmp_array_v_name = string.format("%s[%s_i]", tmp_array_name, tmp_array_name)
+
+				table.insert(outCodes, string.format("local %s = {}", tmp_array_name))
+				table.insert(outCodes, string.format("local %s_len, pos = unpack(\"<I4\", pos)", tmp_array_name))
+				table.insert(outCodes, string.format("for %s_i = 1, %s_len do", tmp_array_name, tmp_array_name))
+
+				if type(array_type) == "string" then
+					field_format = self.fmt[array_type]
+					if field_format then
+						table.insert(self.tmp_fmt, field_format.fmt)
+						table.insert(self.tmp_val, tmp_array_v_name)
+					elseif array_type == "bytes" then
+						local field_len = field[4]
+						table.insert(self.tmp_fmt, string.format("<c%d", field_len))
+						table.insert(self.tmp_val, tmp_array_v_name)
+					end
+				elseif type(array_type) == "table" then
+					local field_table = field[3]
+					local tmp_table_name = string.format("%s_t", tmp_array_v_name)
+
+					table.insert(outCodes, string.format("local %s = {}", tmp_table_name))
+					self:DynamicParseCode(outCodes, field_table, tmp_table_name)
+					table.insert(outCodes, string.format("%s = %s", tmp_array_v_name, tmp_table_name))
+				end
+				flushTmp()
+				table.insert(outCodes, "end")
+				table.insert(outCodes, string.format("%s = %s", field_name, tmp_array_name))
+			end
+		end
+	end
+	flushTmp()
+end
+
+function Proto:CreatePackFunction(proto)
+	if not proto then return end
+	local pack_codes = {
+		"return function(body)",
+		"local buf = {}",
+		"local insert, pack, concat = table.insert, string.pack, table.concat"
+	}
+	self:DynamicPackCode(pack_codes, proto, "body")
+	table.insert(pack_codes, "return concat(buf)")
+	table.insert(pack_codes, "end")
+	return load(table.concat(pack_codes, "\n"))()
+end
+
+function Proto:CreateParseFunction(proto)
+	if not proto then return end
+	local parse_codes = {
+		"return function(buf, pos)",
+		"local body = {}",
+		"local unpack = string.unpack"
+	}
+	self:DynamicParseCode(parse_codes, proto, "body")
+	table.insert(parse_codes, "return body")
+	table.insert(parse_codes, "end")
+	return load(table.concat(parse_codes, "\n"))()
+end
+
+function Proto:AddProto(proto)
+	for name, info in pairs(proto) do
+		local cmd = info.SUBCMD
+		local t = {
+			pack = self:CreatePackFunction(info.BODY.SC),
+			parse = self:CreateParseFunction(info.BODY.CS)
+		}
+		self.name2act[name] = t
 		self.cmd2act[cmd] = t
 	end
 end
 
-function Proto:Pack(cmd, data)
-	if not cmd or not data then
+function Proto:Pack(cmd, body)
+	local func = self.cmd2act[cmd] or self.name2act[cmd]
+	if not func then
+		print("error! undefined cmd "..tostring(cmd))
 		return
 	end
-	local packfunc = self.cmd2act[cmd]
-	if not packfunc then
-		print("error! pack undefined cmd "..tostring(cmd))
-		return
-	end
-	local buf = packfunc.pack(data)
-	local orglen = #buf
-	packfunc = self.cmd2act[HEADER]
-	if orglen > self.compLen then
-		buf = btCompress.Encode_Lz4(buf)
-	end
-	return packfunc.pack({
-		cmd = cmd,
-		crypt = {
-			type = 0
-		},
-		compress = {
-			type = orglen > self.compLen and 1 or 0,
-			len = orglen
-		},
-		verify = {
-			type = 0,
-			token = ""
-		},
-		data = buf
-	})
+	return func.pack(body)
 end
 
-function Proto:Parse(pack)
-	if not pack or #pack < 4 then
+function Proto:Parse(cmd, buf)
+	local func = self.cmd2act[cmd] or self.name2act[cmd]
+	if not func then
+		print("error! undefined cmd "..tostring(cmd))
 		return
 	end
-	local packfunc = self.cmd2act[HEADER]
-	local header = packfunc.parse(pack)
-	local buf = header.data
-	if header.compress.type == 1 then
-		buf = btCompress.Decode_Lz4(header.data, header.compress.len)
-	end
-	parsefunc = self.cmd2act[header.cmd]
-	if not parsefunc then
-		print("error! parse undefined cmd "..tostring(header.cmd))
-		return
-	end
-	return header.cmd, parsefunc.parse(buf)
+	return func.parse(buf)
 end
 
 return Proto
